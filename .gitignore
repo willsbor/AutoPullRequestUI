@@ -46,3 +46,10 @@ screenshots
 log_message.txt
 
 fastlane/report.xml
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+
