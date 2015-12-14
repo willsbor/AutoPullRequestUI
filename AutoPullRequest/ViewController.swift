@@ -22,19 +22,33 @@ class ViewController: NSViewController, NSTextFieldDelegate {
     @IBOutlet weak var sourceBrowseButton: NSButton!
     @IBOutlet weak var resetButton: NSButton!
     @IBOutlet weak var scriptButton: NSButton!
+    @IBOutlet weak var logMessageTestScroll: NSScrollView!
     
-    var repo_path = "https://github.com/willsbor/AutoRepoTest.git"
-    var repo_branch = "master"
+    var repo_path = ""
+    var repo_branch = ""
     
-    var github_user = "designer.gogolook@gmail.com"
+    var github_user = ""
     var github_password = ""
     
     var source_dir = ""
-    var workspace_dir = "/tmp/autopullrequest.workspace"
+    var workspace_dir = ""
     var commit_message = ""
     
     //var python_script = "/Users/willsborkang/Documents/gogolook/iOS/XcassetsOven/AutoPullRequest.py"
     var python_script: String = "AutoPullRequest.py";
+    
+    func resetValue() {
+        self.repo_path = "https://github.com/Gogolook-Inc/DesignImages.git"
+        self.repo_branch = "whoscall-ios"
+        
+        self.github_user = "designer.gogolook@gmail.com"
+        self.github_password = ""
+        
+        self.source_dir = ""
+        self.workspace_dir = "/tmp/autopullrequest.workspace"
+        
+        self.representedObject = nil
+    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -42,21 +56,11 @@ class ViewController: NSViewController, NSTextFieldDelegate {
         self.loadValues()
 
         // Do any additional setup after loading the view.
-        self.githubAccountTextField.stringValue = self.github_user
-        self.githubPasswordTextField.stringValue = self.github_password
-        self.githubRepoTextField.stringValue = self.repo_path
-        self.githubRepoBranchTextField.stringValue = self.repo_branch
-        self.sourceDirTextField.stringValue = self.source_dir
-        self.workspaceTextField.stringValue = self.workspace_dir
-        self.commitMessageTextField.stringValue = self.commit_message
-        
         
         self.workspaceTextField.enabled = false
         self.sourceDirTextField.enabled = false
         
         NSNotificationCenter.defaultCenter().addObserver(self, selector: "controlTextDidChange:", name: NSControlTextDidChangeNotification, object: nil)
-        
-        
         
     }
 
@@ -103,19 +107,6 @@ class ViewController: NSViewController, NSTextFieldDelegate {
         return true
     }
     
-    func resetValue() {
-        self.repo_path = "https://github.com/willsbor/AutoRepoTest.git"
-        self.repo_branch = "master"
-        
-        self.github_user = "designer.gogolook@gmail.com"
-        self.github_password = ""
-        
-        self.source_dir = ""
-        self.workspace_dir = "/tmp/autopullrequest.workspace"
-        
-        self.representedObject = nil
-    }
-    
     func getNowDir() -> String {
         let pipe = NSPipe()
         let file = pipe.fileHandleForReading
@@ -143,8 +134,9 @@ class ViewController: NSViewController, NSTextFieldDelegate {
         }
     }
     
-    func exePython(command: [String]) -> Bool {
-        print("=========\nexec = \(command.joinWithSeparator(" "))")
+    func exePython(command: [String]) -> String {
+        var log = ""
+        log += "=========\nexec = \(command.joinWithSeparator(" "))" + "\n"
         //let pid = NSProcessInfo.processInfo().processIdentifier
         let pipe = NSPipe()
         let file = pipe.fileHandleForReading
@@ -165,21 +157,19 @@ class ViewController: NSViewController, NSTextFieldDelegate {
         let errordata = errorfile.readDataToEndOfFile()
         errorfile.closeFile()
         
-        print("finished [\(command.joinWithSeparator(" "))]")
+        log += "finished [\(command.joinWithSeparator(" "))]" + "\n"
+        
         if let errorResult = String(data: errordata, encoding: NSUTF8StringEncoding) {
-            print("errorResult = \(errorResult)")
-            print("=========\n\n")
-            
-            return true  /// temp
+            log += "errorResult = \(errorResult)" + "\n"
+            log += "=========\n\n" + "\n"
         }
-        else {
-            if let result = String(data: data, encoding: NSUTF8StringEncoding) {
-                print("result = \(result)")
-                print("=========\n\n")
-            }
-            
-            return true
+        if let result = String(data: data, encoding: NSUTF8StringEncoding) {
+            log += "result = \(result)" + "\n"
+            log += "=========\n\n" + "\n"
         }
+        
+        log = log.stringByReplacingOccurrencesOfString(self.github_password, withString: "##########")
+        return log
     }
     
     func _valueCheck(control: NSControl, message: String, condition: ((Void) -> Bool)) -> Bool {
@@ -226,6 +216,7 @@ class ViewController: NSViewController, NSTextFieldDelegate {
         
         if (alert.runModal() == NSAlertFirstButtonReturn) {
             self.resetValue()
+            self.saveValues()
         }
         
     }
@@ -289,52 +280,31 @@ class ViewController: NSViewController, NSTextFieldDelegate {
         self.saveValues()
         
         dispatch_async(dispatch_get_main_queue()) { () -> Void in
-            var result = self.exePython([self.python_script, "-c", self.workspace_dir])
-            if result {
-                result = self.exePython([self.python_script, "-w", self.workspace_dir, "-u", "/Users/willsborkang/Documents/gogolook/temp/pr_test"])
-                if result {
-                    result = self.exePython([self.python_script, "-w", self.workspace_dir, "-r", self.commit_message, "-a", self.github_user, "-x", self.github_password])
-                    
-                    if result {
-                        let alert = NSAlert()
-                        alert.addButtonWithTitle("OK")
-                        alert.messageText = "Finished"
-                        alert.alertStyle = .InformationalAlertStyle
-                        
-                        alert.runModal()
-                        
-                        self.commitMessageTextField.stringValue = ""
-                        self.commit_message = ""
-                        self.saveValues()
-                    }
-                    else {
-                        let alert = NSAlert()
-                        alert.addButtonWithTitle("OK")
-                        alert.messageText = "Error (3/3)"
-                        alert.alertStyle = .InformationalAlertStyle
-                        
-                        alert.runModal()
-                    }
-                }
-                else {
-                    let alert = NSAlert()
-                    alert.addButtonWithTitle("OK")
-                    alert.messageText = "Error (2/3)"
-                    alert.alertStyle = .InformationalAlertStyle
-                    
-                    alert.runModal()
-                    
-                }
+            var log = ""
+            if let textView = self.logMessageTestScroll.contentView.documentView as? NSTextView {
+                textView.string = log
             }
-            else {
-                let alert = NSAlert()
-                alert.addButtonWithTitle("OK")
-                alert.messageText = "Error (1/3)"
-                alert.alertStyle = .InformationalAlertStyle
-                
-                alert.runModal()
-                
+            
+
+            log += self.exePython([self.python_script, "-c", self.workspace_dir, "--repo", self.repo_path, "--branch", self.repo_branch, "-a", self.github_user, "-x", self.github_password]) + "\n"
+            log += self.exePython([self.python_script, "-w", self.workspace_dir, "-u", self.source_dir, "-p", self.commit_message, "--repo", self.repo_path, "--branch", self.repo_branch, "-a", self.github_user, "-x", self.github_password]) + "\n"
+            
+            if let textView = self.logMessageTestScroll.contentView.documentView as? NSTextView {
+                textView.string = log
             }
+
+            print(log)
+            
+            let alert = NSAlert()
+            alert.addButtonWithTitle("OK")
+            alert.messageText = "Task Finished"
+            alert.alertStyle = .InformationalAlertStyle
+            
+            alert.runModal()
+            
+            self.commitMessageTextField.stringValue = ""
+            self.commit_message = ""
+            self.saveValues()
             
             self.processingAnimationIndicator.stopAnimation(nil)
             self.applyButton.enabled = true
@@ -349,7 +319,6 @@ class ViewController: NSViewController, NSTextFieldDelegate {
             self.resetButton.enabled = true
         }
     }
-
     
     func saveValues() {
         NSUserDefaults.standardUserDefaults().setObject(self.github_user, forKey: "github_user")
@@ -366,6 +335,8 @@ class ViewController: NSViewController, NSTextFieldDelegate {
     }
     
     func loadValues() {
+        self.resetValue()
+        
         if let value = NSUserDefaults.standardUserDefaults().objectForKey("github_user") {
             self.github_user = value as! String
         }
@@ -397,6 +368,8 @@ class ViewController: NSViewController, NSTextFieldDelegate {
             self.github_password = password
             self.githubPasswordTextField.stringValue = self.github_password
         }
+        
+        self.representedObject = nil
     }
 }
 
