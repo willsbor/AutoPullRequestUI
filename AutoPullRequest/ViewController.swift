@@ -159,17 +159,96 @@ class ViewController: NSViewController, NSTextFieldDelegate {
         
         log += "finished [\(command.joinWithSeparator(" "))]" + "\n"
         
-        if let errorResult = String(data: errordata, encoding: NSUTF8StringEncoding) {
-            log += "errorResult = \(errorResult)" + "\n"
-            log += "=========\n\n" + "\n"
-        }
         if let result = String(data: data, encoding: NSUTF8StringEncoding) {
             log += "result = \(result)" + "\n"
+            log += "=========\n\n" + "\n"
+        }
+        if let errorResult = String(data: errordata, encoding: NSUTF8StringEncoding) {
+            log += "errorResult = \(errorResult)" + "\n"
             log += "=========\n\n" + "\n"
         }
         
         log = log.stringByReplacingOccurrencesOfString(self.github_password, withString: "##########")
         return log
+    }
+    
+    func _runCommand(launchPath: String, arguments: [String]) -> (errordata: NSData, data: NSData) {
+        let pipe = NSPipe()
+        let file = pipe.fileHandleForReading
+        let errorpipe = NSPipe()
+        let errorfile = errorpipe.fileHandleForReading
+        
+        let task = NSTask()
+        task.launchPath = launchPath
+        task.arguments = arguments
+        task.standardOutput = pipe
+        task.standardError = errorpipe
+        
+        task.launch()
+        
+        let data = file.readDataToEndOfFile()
+        file.closeFile()
+        
+        let errordata = errorfile.readDataToEndOfFile()
+        errorfile.closeFile()
+
+        return (data, errordata)
+    }
+    
+    func _checkAndInstall(finishedBlock: (Void) -> Void) {
+        
+        let (_, errordata) = self._runCommand("/usr/bin/hash", arguments: ["hub"])
+        
+        if let errorResult = String(data: errordata, encoding: NSUTF8StringEncoding) {
+            if errorResult != "" {
+                
+                
+                let alert = NSAlert()
+                alert.addButtonWithTitle("install")
+                alert.addButtonWithTitle("cancel")
+                alert.messageText = "please install \"hub\" first\nhttps://github.com/github/hub"
+                alert.alertStyle = .WarningAlertStyle
+                
+                if (alert.runModal() == NSAlertFirstButtonReturn) {
+                    let (_, installErrorResult) = self._runCommand("/usr/bin/osascript", arguments: ["-e", "do shell script \"gem install hub\" with administrator privileges"])
+                    
+                    if let errorResult = String(data: installErrorResult, encoding: NSUTF8StringEncoding) {
+                        if errorResult == "" {
+                            let alert = NSAlert()
+                            alert.addButtonWithTitle("OK")
+                            alert.messageText = "install hub success"
+                            alert.alertStyle = .WarningAlertStyle
+                            
+                            if (alert.runModal() == NSAlertFirstButtonReturn) {
+                                finishedBlock()
+                            }
+                        }
+                        else {
+                            let alert = NSAlert()
+                            alert.addButtonWithTitle("OK")
+                            alert.messageText = "install hub success failed"
+                            alert.alertStyle = .WarningAlertStyle
+                            
+                            alert.runModal()
+                        }
+                    }
+                    else {
+                        let alert = NSAlert()
+                        alert.addButtonWithTitle("OK")
+                        alert.messageText = "install hub success failed[" + errorResult + "]"
+                        alert.alertStyle = .WarningAlertStyle
+                        
+                        alert.runModal()
+                    }
+                }
+            }
+            else {
+                finishedBlock()
+            }
+        }
+        else {
+            finishedBlock()
+        }
     }
     
     func _valueCheck(control: NSControl, message: String, condition: ((Void) -> Bool)) -> Bool {
@@ -239,8 +318,14 @@ class ViewController: NSViewController, NSTextFieldDelegate {
             }
         }
     }
-    
+
     @IBAction func clickApply(sender: AnyObject) {
+        self._checkAndInstall { () -> Void in
+            self._clickApply(sender)
+        }
+    }
+    
+    func _clickApply(sender: AnyObject) {
 
         if !self._valueCheck(self.githubAccountTextField, message: "account is Empty", condition: {
             return self.github_user.lengthOfBytesUsingEncoding(NSUTF8StringEncoding) == 0
